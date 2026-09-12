@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StandardLevel {
+  L1
+  L2
+  L3
+  L4
+  L5
+  L6
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String                        // display name, e.g. "Google"
+  nameCanonical String   @unique               // normalized: lowercase, no Inc/LLC/Ltd suffixes, e.g. "google"
+  createdAt     DateTime @default(now())
+
+  levelMappings       CompanyLevelMapping[]
+  compensationEntries CompensationEntry[]
+
+  @@index([nameCanonical])
+}
+
+// The curated "leveling rubric" — mirrors Levels.fyi's own leveling rubric concept.
+// Authored manually per company/level, NOT derived from compensation data.
+model CompanyLevelMapping {
+  id            String        @id @default(cuid())
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id])
+
+  nativeLevel   String        // what the company actually calls it, e.g. "SDE II", "L5", "Senior SWE"
+  standardLevel StandardLevel // user-facing bucket, from documented scope/YoE research
+
+  // Inputs to the composite levelScore formula — kept individually for auditability
+  yoeMin        Int           // researched YoE range lower bound for this level
+  yoeMax        Int           // researched YoE range upper bound for this level
+  scopeWeight   Int           // 1-5, judgment call from public ladder/scope descriptions
+  levelIndex    Int           // 1-based position within this company's own ladder
+  totalLevels   Int           // length of this company's full ladder
+
+  levelScore    Int           // 1-100, computed at seed time:
+                               // round(0.4*yoeComponent + 0.4*scopeComponent + 0.2*positionComponent)
+
+  createdAt     DateTime      @default(now())
+
+  @@unique([companyId, nativeLevel])
+  @@index([standardLevel])
+}
+
+model Role {
+  id                  String               @id @default(cuid())
+  name                String               @unique // e.g. "Software Engineer", "Product Manager"
+  compensationEntries CompensationEntry[]
+}
+
+model CompensationEntry {
+  id             String        @id @default(cuid())
+
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id])
+  roleId         String
+  role           Role          @relation(fields: [roleId], references: [id])
+
+  nativeLevel    String        // exactly as submitted — kept for audit trail
+  standardLevel  StandardLevel // resolved via CompanyLevelMapping at ingestion
+  levelScore     Int           // snapshot of the mapping's levelScore at ingestion time
+                                 // (denormalized on purpose: comparisonScore needs this per-entry
+                                 // at query time without a join on every filter/sort/compare call)
+
+  location       String
+
+  baseSalary     Int           // annual
+  bonus          Int           @default(0)
+  stock          Int           @default(0) // annualized
+  totalComp      Int           // computed at ingestion: baseSalary + bonus + stock
+
+  source         String?       // optional provenance note
+  createdAt      DateTime      @default(now())
+
+  @@index([standardLevel, location])
+  @@index([companyId])
+  @@index([totalComp])
+}
