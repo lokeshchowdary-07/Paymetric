@@ -12,8 +12,11 @@ export function median(values: number[]): number | null {
   return sorted[mid];
 }
 
-export async function listCompaniesWithStats() {
+export async function listCompaniesWithStats(search?: string) {
   const companies = await prisma.company.findMany({
+    where: search
+      ? { name: { contains: search, mode: "insensitive" } }
+      : undefined,
     orderBy: { name: "asc" },
     include: {
       _count: { select: { compensationEntries: true } },
@@ -61,6 +64,14 @@ export async function getCompanyDetail(id: string) {
     select: { standardLevel: true, totalComp: true },
   });
 
+  const locationStats = await prisma.compensationEntry.groupBy({
+    by: ["location"],
+    where: { companyId: id },
+    _avg: { totalComp: true },
+    _count: { _all: true },
+    orderBy: { location: "asc" },
+  });
+
   const byLevel = new Map<StandardLevel, number[]>();
   for (const level of STANDARD_LEVELS) byLevel.set(level, []);
   for (const entry of entries) {
@@ -89,6 +100,13 @@ export async function getCompanyDetail(id: string) {
     entryCount: entries.length,
     levelMappings: company.levelMappings,
     statsByLevel,
+    statsByLocation: locationStats.map((row) => ({
+      location: row.location,
+      entryCount: row._count._all,
+      avgTotalComp: row._avg.totalComp
+        ? Math.round(row._avg.totalComp)
+        : null,
+    })),
   };
 }
 

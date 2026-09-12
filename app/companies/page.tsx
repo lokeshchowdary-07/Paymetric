@@ -4,8 +4,14 @@ import { formatCurrency } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function CompaniesPage() {
-  const companies = await listCompaniesWithStats();
+export default async function CompaniesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string | string[] }>;
+}) {
+  const rawSearch = (await searchParams).search;
+  const search = typeof rawSearch === "string" ? rawSearch : "";
+  const companies = await listCompaniesWithStats(search);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
@@ -14,6 +20,25 @@ export default async function CompaniesPage() {
         Each company has a curated native-to-standard level mapping. Stats are
         computed from ingested compensation entries.
       </p>
+      <form method="get" className="mt-6 flex max-w-xl gap-3">
+        <label className="sr-only" htmlFor="company-search">
+          Search companies
+        </label>
+        <input
+          id="company-search"
+          name="search"
+          type="search"
+          defaultValue={search}
+          placeholder="Search companies"
+          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+        >
+          Search
+        </button>
+      </form>
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {companies.map((company) => (
           <Link

@@ -63,6 +63,30 @@ export default async function CompanyDetailPage({
       </section>
 
       <section className="mt-8 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <h2 className="px-3 py-3 text-sm font-semibold">Average total comp by location</h2>
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="px-3 py-2 font-medium">Location</th>
+              <th className="px-3 py-2 font-medium">Entries</th>
+              <th className="px-3 py-2 font-medium">Avg total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {company.statsByLocation.map((row) => (
+              <tr key={row.location} className="border-t border-slate-100">
+                <td className="px-3 py-2">{row.location}</td>
+                <td className="px-3 py-2">{row.entryCount}</td>
+                <td className="px-3 py-2">
+                  {row.avgTotalComp ? formatCurrency(row.avgTotalComp) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="mt-8 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <h2 className="px-3 py-3 text-sm font-semibold">Native level mapping</h2>
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-slate-600">

@@ -1,15 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils/format";
 
-type Preset = {
+type Company = {
   id: string;
-  label: string;
-  companyName: string;
-  roleName: string;
-  standardLevel: string;
-  sampleCount: number;
+  name: string;
+};
+
+type RoleOption = {
+  id: string;
+  name: string;
+};
+
+type LocationOption = {
+  location: string;
+  entryId: string;
 };
 
 type CompareRow = {
@@ -32,31 +38,115 @@ type CompareRow = {
   role: { name: string };
 };
 
-export function CompareClient({ presets }: { presets: Preset[] }) {
+export function CompareClient() {
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [levels, setLevels] = useState<string[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [companyId, setCompanyId] = useState("");
+  const [roleId, setRoleId] = useState("");
+  const [standardLevel, setStandardLevel] = useState("");
+  const [location, setLocation] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [selectedLabels, setSelectedLabels] = useState<Record<string, string>>({});
   const [results, setResults] = useState<CompareRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const available = useMemo(
-    () => presets.filter((preset) => !selected.includes(preset.id)),
-    [presets, selected]
-  );
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((response) => response.json())
+      .then((payload) => setCompanies(payload.data ?? []))
+      .catch(() => setError("Could not load companies."));
+  }, []);
 
-  function addPreset(id: string) {
-    if (!id || selected.length >= 3) return;
-    setSelected((current) => [...current, id]);
+  useEffect(() => {
+    if (!companyId) {
+      setRoles([]);
+      return;
+    }
+    fetch(`/api/compare/options?step=role&companyId=${companyId}`)
+      .then((response) => response.json())
+      .then((payload) => setRoles(payload.data ?? []))
+      .catch(() => setError("Could not load roles."));
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId || !roleId) {
+      setLevels([]);
+      return;
+    }
+    fetch(`/api/compare/options?step=level&companyId=${companyId}&roleId=${roleId}`)
+      .then((response) => response.json())
+      .then((payload) => setLevels(payload.data ?? []))
+      .catch(() => setError("Could not load levels."));
+  }, [companyId, roleId]);
+
+  useEffect(() => {
+    if (!companyId || !roleId || !standardLevel) {
+      setLocations([]);
+      return;
+    }
+    const query = new URLSearchParams({
+      step: "location",
+      companyId,
+      roleId,
+      standardLevel,
+    });
+    fetch(`/api/compare/options?${query}`)
+      .then((response) => response.json())
+      .then((payload) => setLocations(payload.data ?? []))
+      .catch(() => setError("Could not load locations."));
+  }, [companyId, roleId, standardLevel]);
+
+  function resetFromCompany(value: string) {
+    setCompanyId(value);
+    setRoleId("");
+    setStandardLevel("");
+    setLocation("");
+  }
+
+  function resetFromRole(value: string) {
+    setRoleId(value);
+    setStandardLevel("");
+    setLocation("");
+  }
+
+  function resetFromLevel(value: string) {
+    setStandardLevel(value);
+    setLocation("");
+  }
+
+  function addLocation() {
+    const option = locations.find((item) => item.location === location);
+    if (!option || selected.length >= 4 || selected.includes(option.entryId)) return;
+    const company = companies.find((item) => item.id === companyId);
+    const role = roles.find((item) => item.id === roleId);
+    setSelected((current) => [...current, option.entryId]);
+    setSelectedLabels((current) => ({
+      ...current,
+      [option.entryId]: `${company?.name} · ${role?.name} · ${standardLevel} · ${location}`,
+    }));
+    setCompanyId("");
+    setRoleId("");
+    setStandardLevel("");
+    setLocation("");
     setResults(null);
   }
 
-  function removePreset(id: string) {
+  function removeEntry(id: string) {
     setSelected((current) => current.filter((item) => item !== id));
+    setSelectedLabels((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     setResults(null);
   }
 
   async function runCompare() {
-    if (selected.length < 2 || selected.length > 3) {
-      setError("Select 2 or 3 presets to compare.");
+    if (selected.length < 2 || selected.length > 4) {
+      setError("Select 2 to 4 entries to compare.");
       return;
     }
     setLoading(true);
@@ -77,49 +167,55 @@ export function CompareClient({ presets }: { presets: Preset[] }) {
     }
   }
 
-  const selectedPresets = selected
-    .map((id) => presets.find((preset) => preset.id === id))
-    .filter((preset): preset is Preset => Boolean(preset));
-
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <label className="block text-sm font-medium text-slate-700">
-          Add a preset
-        </label>
-        <select
-          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-          defaultValue=""
-          onChange={(event) => {
-            addPreset(event.target.value);
-            event.target.value = "";
-          }}
-          disabled={selected.length >= 3}
-        >
-          <option value="">
-            {selected.length >= 3
-              ? "Maximum of 3 selected"
-              : "Choose company · role · standard level"}
-          </option>
-          {available.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label} ({preset.sampleCount} entries)
-            </option>
-          ))}
-        </select>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-sm">
+            Company
+            <select value={companyId} onChange={(event) => resetFromCompany(event.target.value)} disabled={selected.length >= 4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <option value="">Choose a company</option>
+              {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm">
+            Role
+            <select value={roleId} onChange={(event) => resetFromRole(event.target.value)} disabled={!companyId || selected.length >= 4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <option value="">Choose a role</option>
+              {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm">
+            Level
+            <select value={standardLevel} onChange={(event) => resetFromLevel(event.target.value)} disabled={!roleId || selected.length >= 4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <option value="">Choose a level</option>
+              {levels.map((level) => <option key={level} value={level}>{level}</option>)}
+            </select>
+          </label>
+          <label className="text-sm">
+            Location
+            <select value={location} onChange={(event) => setLocation(event.target.value)} disabled={!standardLevel || selected.length >= 4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2">
+              <option value="">Choose a location</option>
+              {locations.map((item) => <option key={item.location} value={item.location}>{item.location}</option>)}
+            </select>
+          </label>
+        </div>
+        <button type="button" onClick={addLocation} disabled={!location || selected.length >= 4} className="mt-4 rounded-md bg-teal-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+          Add entry
+        </button>
         <p className="mt-2 text-xs text-slate-500">
-          Presets are grouped from real CompensationEntry rows. Pick 2–3.
+          Pick 2–4 entries from real compensation data.
         </p>
         <ul className="mt-3 flex flex-wrap gap-2">
-          {selectedPresets.map((preset) => (
+          {selected.map((id) => (
             <li
-              key={preset.id}
+              key={id}
               className="flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-sm text-teal-900"
             >
-              {preset.label}
+              {selectedLabels[id]}
               <button
                 type="button"
-                onClick={() => removePreset(preset.id)}
+                onClick={() => removeEntry(id)}
                 className="text-teal-700 hover:text-teal-950"
               >
                 ×

@@ -11,9 +11,9 @@ export async function GET(request: Request) {
       .map((id) => id.trim())
       .filter(Boolean);
 
-    if (ids.length < 2 || ids.length > 3) {
+    if (ids.length < 2 || ids.length > 4) {
       return NextResponse.json(
-        { error: "Provide 2 or 3 CompensationEntry ids via entryIds." },
+        { error: "Provide 2 to 4 CompensationEntry ids via entryIds." },
         { status: 400 }
       );
     }

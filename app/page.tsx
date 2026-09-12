@@ -38,7 +38,7 @@ export default function Home() {
         >
           <h2 className="font-semibold">Compare</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Pick 2–3 real presets and rank them with a comparison score.
+            Pick 2–4 real presets and rank them with a comparison score.
           </p>
         </Link>
       </div>
